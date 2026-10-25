@@ -60,7 +60,7 @@ def _png_default_image(blob: bytes) -> Union[bytes, bytearray]:
 
 
 def _png_transparency(image: Union[NDArray[np.uint8], NDArray[np.uint16]], blob: bytes) -> Optional[NDArray[np.uint8]]:
-    """Match PNG color keys before lossy sample conversion"""
+    """Match PNG color keys before lossy sample conversion."""
     _, _, bit_depth, color_type, _, _, _ = PNG_IHDR.unpack_from(blob, len(PNG_SIGNATURE) + PNG_CHUNK_HEADER.size)
     if color_type not in (PNG_GRAYSCALE, PNG_TRUECOLOR):
         return None

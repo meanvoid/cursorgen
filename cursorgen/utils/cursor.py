@@ -31,7 +31,7 @@ class CursorImage:
 
 
 class CursorFrame(Sequence[CursorImage]):
-    """Cursor images with a frame delay in seconds, including fractional seconds"""
+    """Cursor images with a frame delay in seconds, including fractional seconds."""
 
     images: List[CursorImage]
     # ANI stores 1/60-second jiffies and Xcursor stores milliseconds
