@@ -3,32 +3,18 @@
 `cursorgen` converts Windows cursors (`.cur` and animated `.ani`) and existing
 Xcursor files into Xcursor files for Linux cursor themes on X11 and Wayland
 
-It is a fork of [win2xcur](https://github.com/quantum5/win2xcur), using OpenCV
-and NumPy to preserve transparency, scale hotspots, and retain animation timing.
-Exact nearest-neighbor scaling keeps pixel edges sharp and generates 13 cursor
-sizes from 22 to 96 pixels. Python installs use headless OpenCV without GUI
-dependencies. ImageMagick is not required
-
-CUR entries use the PNG default image when an embedded PNG contains animation.
-ANI files retain their frame order and timing
-
-Xcursor round trips without resizing preserve the stored premultiplied pixel
-values. Hotspots can lie on the right or bottom image boundary and scale with
-the image, including when converting between 24-pixel and 32-pixel cursors
+`cursorgen` is a fork of [win2xcur](https://github.com/quantum5/win2xcur) that
+preserves cursor colors and transparency using OpenCV and NumPy instead of
+ImageMagick. It generates 13 sizes from 22 to 96 pixels with nearest-neighbor
+scaling and preserves animation timing
 
 ## Installation
 
-Python 3.7 or newer is required. Install from a checkout with pip:
+Python 3.7 or newer is required. Install the package from PyPI:
 
 ```sh
-git clone https://github.com/meanvoid/cursorgen.git
-cd cursorgen
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install .
+python -m pip install cursorgen
 ```
-
-On Windows, activate the environment with `.venv\Scripts\activate` instead
 
 ## Usage
 
@@ -37,14 +23,12 @@ Convert one file or a cursor pack:
 ```sh
 cursorgen arrow.cur -o output
 cursorgen windows-cursors/*.cur windows-cursors/*.ani -o output
-cursorgen --help
 ```
 
 The output directory is created automatically. `arrow.cur` becomes
-`output/arrow`, with no extension. Files with the same stem, such as
-`arrow.cur` and `arrow.ani`, need separate output directories. Existing output
-files are replaced unless they refer to an input file, including through a
-symlink or hardlink. Output files must also be distinct from each other
+`output/arrow`. Existing files are replaced, but input files are protected.
+Use separate output directories for files with the same stem, such as
+`arrow.cur` and `arrow.ani`
 
 Try the bundled samples from the checkout:
 
@@ -79,9 +63,14 @@ nix build .
 
 ## Development
 
-Use Python 3.10 or newer for development tools and the existing test suite:
+Clone the repository and use Python 3.10 or newer for development tools and the
+existing test suite:
 
 ```sh
+git clone https://github.com/meanvoid/cursorgen.git
+cd cursorgen
+python -m venv .venv
+. .venv/bin/activate
 python -m pip install -e '.[dev]'
 cursorgen sample/crosshair.cur -o output/dev
 python -m unittest discover -s tests -v
