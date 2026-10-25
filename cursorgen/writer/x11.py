@@ -1,12 +1,13 @@
 from typing import Iterable, List, Optional, Sequence
 
 import numpy as np
+from typing_extensions import Final
 
 from cursorgen import xcursor
 from cursorgen.utils.cursor import ALPHA_CHANNEL, BGRA_CHANNELS, CHANNEL_MAX, COLOR_CHANNELS, CursorFrame
 from cursorgen.utils.image import resize_nearest
 
-SIZES: List[int] = [22, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 88, 96]
+SIZES: Final[List[int]] = [22, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 88, 96]
 
 
 def _image_chunk(frame: CursorFrame, size: int, delay: int) -> xcursor.ImageChunk:
