@@ -1,61 +1,47 @@
-import struct
-from typing import List, Tuple
+from typing import List
 
-from PIL import Image
+from typing_extensions import Final
 
-from cursorgen.parser.base import BaseParser
+from cursorgen.formats import ICON_DIRECTORY, ICON_ENTRY, IconDirectory, IconEntry
 from cursorgen.parser.bmp import BMPParser
 from cursorgen.utils.cursor import CursorFrame, CursorImage
+from cursorgen.utils.image import PNG_SIGNATURE, decode_png
 
 
-class CURParser(BaseParser):
-    MAGIC = b"\0\0\02\0"
-    ICO_TYPE_CUR = 2
-    ICON_DIR = struct.Struct("<HHH")
-    ICON_DIR_ENTRY = struct.Struct("<BBBBHHII")
+class CURParser:
+    MAGIC: Final = b"\0\0\02\0"
+    ICO_TYPE_CUR: Final = 2
 
-    @classmethod
-    def can_parse(cls, blob: bytes) -> bool:
-        return blob[: len(cls.MAGIC)] == cls.MAGIC
+    @staticmethod
+    def can_parse(blob: bytes) -> bool:
+        return blob.startswith(CURParser.MAGIC)
 
     def __init__(self, blob: bytes) -> None:
-        super().__init__(blob)
-        self.image_data: List[bytes] = []
-        self._hotspots = self._parse()
-        self.frames = self._create_frames()
+        if len(blob) < ICON_DIRECTORY.size:
+            raise ValueError("Truncated cursor directory header")
+        header = IconDirectory._make(ICON_DIRECTORY.unpack_from(blob))
+        if header.reserved != 0 or header.type != self.ICO_TYPE_CUR:
+            raise ValueError("Not a .cur file")
+        directory_end = ICON_DIRECTORY.size + header.image_count * ICON_ENTRY.size
+        if header.image_count == 0 or directory_end > len(blob):
+            raise ValueError("Empty or truncated cursor directory")
 
-    def _parse(self) -> List[Tuple[int, int]]:
-        reserved, ico_type, image_count = self.ICON_DIR.unpack(self.blob[: self.ICON_DIR.size])
-        assert reserved == 0
-        assert ico_type == self.ICO_TYPE_CUR
+        images: List[CursorImage] = []
+        directory = memoryview(blob)[ICON_DIRECTORY.size : directory_end]
+        for fields in ICON_ENTRY.iter_unpack(directory):
+            entry = IconEntry._make(fields)
+            if entry.size == 0 or entry.offset < directory_end or entry.offset + entry.size > len(blob):
+                raise ValueError("Invalid cursor image offset or size")
+            image_data = blob[entry.offset : entry.offset + entry.size]
+            hotspot = (entry.hotspot_x, entry.hotspot_y)
+            if image_data.startswith(PNG_SIGNATURE):
+                # CUR entries use the PNG default image, not its animation
+                image = decode_png(image_data)
+            else:
+                image = BMPParser(image_data).frame
+            height, width = image.shape[:2]
+            if not (0 <= hotspot[0] <= width and 0 <= hotspot[1] <= height):
+                raise ValueError(f"Cursor hotspot {hotspot} is outside image {(width, height)}")
+            images.append(CursorImage(image, hotspot, max(width, height)))
 
-        offset = self.ICON_DIR.size
-        hotspots = []
-        for i in range(image_count):
-            (
-                width,
-                height,
-                palette,
-                reserved,
-                hx,
-                hy,
-                size,
-                file_offset,
-            ) = self.ICON_DIR_ENTRY.unpack(self.blob[offset : offset + self.ICON_DIR_ENTRY.size])
-            self.image_data.append(self.blob[file_offset : file_offset + size])
-            hotspots.append((hx, hy))
-
-            offset += self.ICON_DIR_ENTRY.size
-        return hotspots
-
-    def _create_frames(self) -> List[CursorFrame]:
-        images = []
-        for hotspot, image_data in zip(self._hotspots, self.image_data):
-            try:
-                image: Image.Image = BMPParser(image_data).frame
-                c_image = CursorImage(image, hotspot, image.width)
-                images.append(c_image)
-            except IOError as e:
-                print(f"Error processing image data: {e}")
-
-        return [CursorFrame(images)]
+        self.frames = [CursorFrame(images)]

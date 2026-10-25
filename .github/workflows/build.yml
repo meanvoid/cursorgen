@@ -4,49 +4,68 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
       fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        os: [ubuntu-latest]
+        include:
+          - python-version: "3.7"
+            os: ubuntu-22.04
+          - python-version: "3.8"
+            os: ubuntu-22.04
+          - python-version: "3.9"
+            os: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Cache wheels
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}
-      - name: Install dependencies
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install wheel coverage
-          pip install -e .
-          sudo apt-get install dmz-cursor-theme
-      - uses: pre-commit/action@v3.0.1
-      - name: Test with sample/crosshair.cur
+          python -m pip install .
+          python -m pip check
+          python fetch_samples.py
+      - name: Install development tools
+        if: matrix.python-version == '3.12'
+        run: python -m pip install '.[dev]'
+      - name: Run pre-commit
+        if: matrix.python-version == '3.12'
+        run: python -m pre_commit run --all-files
+      - name: Run unit tests
+        if: ${{ !contains(fromJSON('["3.7", "3.8", "3.9"]'), matrix.python-version) }}
+        run: python -m unittest discover -s tests -v
+      - name: Test installed CLI with bundled CUR and ANI samples
+        working-directory: ${{ runner.temp }}
         run: |
-          coverage run -m cursorgen sample/crosshair.cur -o /tmp
-          ls -l /tmp/crosshair
-      - name: Test with animated cursors
-        run: |
-          wget http://www.anicursor.com/waiting.zip
-          mkdir ani output
-          unzip waiting.zip -d ani
-          coverage run -a -m cursorgen ani/*.ani -o output
-          ls -l output/*
+          mkdir -p cursorgen-smoke/static cursorgen-smoke/animated
+          cursorgen "$GITHUB_WORKSPACE/sample/crosshair.cur" -o cursorgen-smoke/static
+          cursorgen "$GITHUB_WORKSPACE/sample/crosshair.ani" -o cursorgen-smoke/animated
+          test -s cursorgen-smoke/static/crosshair
+          test -s cursorgen-smoke/animated/crosshair
       - name: Test with dmz-cursor-theme
+        if: matrix.python-version == '3.12'
+        working-directory: ${{ runner.temp }}
         run: |
+          sudo apt-get update
+          sudo apt-get install --yes dmz-cursor-theme
           mkdir dmz-white
-          coverage run -a -m cursorgen /usr/share/icons/DMZ-White/cursors/* -o dmz-white
-          ls -l dmz-white/*
-      - name: Generating coverage report
-        run: coverage xml
-      - uses: codecov/codecov-action@v1
+          cursorgen /usr/share/icons/DMZ-White/cursors/* -o dmz-white
+          test -n "$(find dmz-white -type f -print -quit)"

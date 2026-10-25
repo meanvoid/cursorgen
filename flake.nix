@@ -1,50 +1,54 @@
 {
-  description = "cursorgen is a fork of win2xcur that aims to preserve the image quality of the cursor.";
+  description = "A fork of win2xcur that converts Windows cursors to Xcursor while preserving image quality.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.zst";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    pre-commit-hooks-nix.url = "github:cachix/pre-commit-hooks.nix";
-    devshell.url = "github:numtide/devshell";
+    flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   };
 
-  outputs = {
-    self,
-    pre-commit-hooks-nix,
-    ...
-  } @ inputs:
-    inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
-      imports = [inputs.flake-parts.flakeModules.easyOverlay];
-      perSystem = {
-        config,
-        system,
-        pkgs,
-        ...
-      }: {
-        _module.args.pkgs = import inputs.nixpkgs {
-          inherit system;
-          overlays = [
-            inputs.devshell.overlays.default
-          ];
+  outputs =
+    inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
+      perSystem =
+        { config, pkgs, ... }:
+        let
+          python = pkgs.python314;
+        in
+        {
+          packages = {
+            cursorgen = python.pkgs.callPackage ./pkgs/cursorgen.nix { };
+            default = config.packages.cursorgen;
+          };
+          checks = { inherit (config.packages) cursorgen; };
+          formatter = pkgs.nixfmt;
+          devShells.default = pkgs.mkShell {
+            packages = [
+              (python.withPackages (
+                ps:
+                config.packages.cursorgen.dependencies
+                ++ [
+                  ps.black
+                  ps.isort
+                  ps.flake8
+                  ps.mypy
+                  ps.build
+                  ps.hatchling
+                  ps.pip
+                ]
+              ))
+              pkgs.pre-commit
+              config.formatter
+              pkgs.actionlint
+              pkgs.imagemagick
+              pkgs.ffmpeg
+            ];
+          };
         };
-        devShells.default = pkgs.devshell.mkShell {
-          imports = [(pkgs.devshell.importTOML ./devshell.toml)];
-          packages = with pkgs; [
-            (python3.withPackages (p:
-              with p; [
-                wand
-                numpy
-                pillow
-                toml
-                black
-                flake8
-                isort
-                mypy
-              ]))
-          ];
-        };
-        formatter = pkgs.alejandra;
-      };
     };
 }
